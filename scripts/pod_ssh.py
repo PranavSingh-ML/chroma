@@ -47,6 +47,12 @@ def find(obj):
 
 
 def main():
+    # Windows text-mode stdout emits CRLF; a CR in the port makes ssh say "Bad port".
+    try:
+        sys.stdout.reconfigure(newline="\n")
+    except Exception:
+        pass
+
     pod_id = sys.argv[1]
     for args in (("ssh", "info", pod_id), ("pod", "get", pod_id)):
         data = run(*args)

@@ -15,7 +15,7 @@ KEY="${SSH_KEY:-$HOME/.runpod/ssh/runpodctl-ssh-key}"
 [ -f "$KEY" ] || KEY="$HOME/.ssh/imgedit_runpod"
 
 echo "== ssh info for $POD_ID =="
-read -r HOST PORT < <(python scripts/pod_ssh.py "$POD_ID")
+read -r HOST PORT < <(python scripts/pod_ssh.py "$POD_ID" | tr -d "$(printf '')")
 echo "ssh root@$HOST -p $PORT"
 SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$PORT" "root@$HOST")
 
