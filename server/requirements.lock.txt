@@ -1,0 +1,16 @@
+# PROVISIONAL - this is requirements.in until Phase 0 replaces it with a real pip freeze.
+# The v0 image is built from this; phase0_probe.py writes the frozen lock; v1 is built from that.
+diffusers==0.40.0
+transformers==5.17.0
+accelerate==1.15.0
+safetensors>=0.5
+peft>=0.17
+sentencepiece
+protobuf
+huggingface_hub[hf_xet]
+bitsandbytes==0.50.2
+pyyaml
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+python-multipart
+pillow

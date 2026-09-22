@@ -1,0 +1,21 @@
+# laptop-side state - never commit
+data/
+!data/.gitkeep
+web/.env.local
+web/node_modules/
+web/dist/
+# phase artefacts
+phase0_report.json
+phase0_out*.png
+smoke_out.png
+train_smoke_out/
+smoke_lora_out.png
+__pycache__/
+*.pyc
+.venv/
+tools/
+apikey.txt
+*.key
+*.token
+phase0/
+.pod_create.json

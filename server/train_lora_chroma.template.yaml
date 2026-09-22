@@ -1,0 +1,62 @@
+# ai-toolkit config for a Chroma1-HD character LoRA. Rendered by server/trainer.py per job:
+# every value marked <<...>> is replaced; everything else is the recipe (spec.md section 5).
+# Derived from ai-toolkit config/examples/train_lora_chroma_24gb.yaml @ a8dfcf7 (2026-09-20).
+---
+job: extension
+config:
+  name: "<<name>>"                      # output folder + LoRA filename
+  process:
+    - type: "sd_trainer"
+      training_folder: "<<output_dir>>"
+      device: cuda:0
+      trigger_word: "<<trigger_word>>"  # added to captions that lack it; [trigger] in prompts is replaced
+      network:
+        type: "lora"
+        linear: 16                      # <<rank>>
+        linear_alpha: 16                # <<alpha>> - kept == rank: the saved file carries no alpha tensor
+      save:
+        dtype: float16
+        save_every: 250                 # <<save_every>>
+        max_step_saves_to_keep: 2
+        push_to_hub: false
+      datasets:
+        - folder_path: "<<dataset_dir>>"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.05    # <<caption_dropout>>
+          shuffle_tokens: false
+          cache_latents_to_disk: true   # frees the VAE during training
+          resolution: [512, 768, 1024]  # <<resolutions>> multi-res buckets; phone photos are rarely square
+      train:
+        batch_size: 1
+        steps: 2000                     # <<steps>>  default 100 x n_images clamped to [1000, 3000]
+        gradient_accumulation: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true    # needed for 1024 on 48 GB
+        noise_scheduler: "flowmatch"
+        optimizer: "adamw8bit"          # <<optimizer>> bitsandbytes
+        lr: 1e-4                        # <<lr>>
+        skip_first_sample: true         # the step-0 sample is just the base model; save 1 min
+        ema_config:
+          use_ema: true                 # <<ema>>
+          ema_decay: 0.99
+        dtype: bf16
+      model:
+        name_or_path: "<<model_path>>"  # local single-file Chroma1-HD.safetensors (shared HF cache)
+        arch: "chroma"
+        quantize: false                 # <<quantize_base>> 48 GB: bf16 base, no 8-bit
+      sample:
+        sampler: "flowmatch"
+        sample_every: 250               # <<sample_every>>
+        sample_start_step: 250
+        width: 1024                     # <<sample_width>>
+        height: 1024                    # <<sample_height>>
+        prompts: []                     # <<sample_prompts>> 4 from the request, each must include [trigger]
+        neg: ""
+        seed: 42
+        walk_seed: true
+        guidance_scale: 4               # <<sample_guidance>>
+        sample_steps: 20                # <<sample_steps>>
+meta:
+  name: "[name]"
+  version: "1.0"

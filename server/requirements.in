@@ -1,0 +1,19 @@
+# Top-level dependencies for the SERVER side, pinned to versions verified on PyPI on 2026-09-17 (imgedit)
+# and re-verified for this repo on 2026-09-21. torch/torchvision come from the Dockerfile torch layer
+# (cu129 index) and are NOT listed here. ai-toolkit's own requirements are installed by the Dockerfile
+# from its pinned checkout (torch lines filtered out) BEFORE this file, so these pins win on conflict.
+# requirements.lock.txt is derived from the union by Phase 0 (pip freeze inside the v0 image).
+diffusers==0.40.0          # ChromaPipeline, ChromaTransformer2DModel.from_single_file, Flux LoRA loader
+transformers==5.17.0
+accelerate==1.15.0
+safetensors>=0.5
+peft>=0.17                 # LoRA adapters (load_lora_weights / set_adapters)
+sentencepiece              # T5 tokenizer
+protobuf
+huggingface_hub[hf_xet]    # fast weight downloads
+bitsandbytes==0.50.2       # adamw8bit optimiser for training (REQUIRED here, unlike imgedit)
+pyyaml                     # render the ai-toolkit config
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+python-multipart
+pillow
