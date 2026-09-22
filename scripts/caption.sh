@@ -75,7 +75,7 @@ cat <<EOF
 
 READ THEM before training - the model gets things wrong, and a wrong caption is worse than a
 terse one. Check especially that none of them describe your face:
-  grep -inE "eyes|hair|jaw|skin|beard|face" $DS/*.txt   # should print nothing
+  grep -inwE "eyes|hair|jaw|skin|beard|face" $DS/*.txt  # -w matters: "chairs" contains "hair"
 
 Then train:  scripts/train.sh $DS <name>-v1 $TRIGGER
 EOF

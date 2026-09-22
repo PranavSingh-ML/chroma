@@ -22,7 +22,7 @@ runs on a GPU; fill in from `phase0/phase0_report.json` / smoke-test output.
 | Model size | repo total 45.3 GB, but we download **only what is needed**: `Chroma1-HD.safetensors` **17.80 GB** (the diffusers `transformer/` folder is the same weights again — skipped) | HF API |
 | T5 / tokenizer / VAE | `ostris/Flex.1-alpha` @ `5dd0b1bc2a9421b891abcf7c9218993f696dd550`: `text_encoder_2` 4.99+4.53 GB, `vae` 0.17 GB | HF API |
 | **Total download** | **≈ 27.5 GB** (17.8 + 9.5 + 0.2), not 45.3 | computed |
-| Why those repos | ai-toolkit's chroma loader fetches exactly these (`hf_hub_download(repo_id="lodestones/Chroma1-HD", filename="Chroma1-HD.safetensors")`, extras from `ostris/Flex.1-alpha`). Using the same ones means **one HF cache serves inference and training** — no second download when a train job starts. | `extensions_built_in/diffusion_models/chroma/chroma_model.py` @ a8dfcf7 |
+| Why those repos | ai-toolkit's chroma loader fetches exactly these (`hf_hub_download(repo_id="lodestones/Chroma1-HD", filename="Chroma1-HD.safetensors")`, extras from `ostris/Flex.1-alpha`), so the server and the trainer at least agree on *which* weights they use. **The hoped-for "one shared download" did not materialise** — measured cache was 55 GB, see deviation 7. | `extensions_built_in/diffusion_models/chroma/chroma_model.py` @ a8dfcf7 |
 
 ### The LoRA key-format problem (designed for, VERIFY in Phase 0)
 
@@ -88,7 +88,7 @@ Estimated cost of a real run at these numbers: 16 images -> 1600 steps ~= 55 min
 2. **Progress parser matched any tqdm bar** - `(\d+)/(\d+)\s*\[` locked onto
    `Loading weights: 219/219`, so the reported step jumped to 219/219 before training started.
    Fixed: anchored to the run-name prefix only the training loop uses.
-3. **`pod_ssh.py` emitted CRLF** - python's Windows text mode put a `` in the port, so every
+3. **`pod_ssh.py` emitted CRLF** - python's Windows text mode put a carriage return in the port, so every
    ssh/scp call failed with `Bad port '22079'`. Fixed at the source.
 
 ## Spend log
