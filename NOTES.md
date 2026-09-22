@@ -104,8 +104,26 @@ $0.33/hr) takes that to ~$1.10, which is why `pod.sh` now tries Community first.
 
 | Date | What | GPU | Hours | $ |
 |---|---|---|---|---|
-| 2026-09-22 | Phase 0 (probe x2, torchaudio fix, then served for training) | RTX A6000 Secure | in progress | ~$0.35 to Phase 0 PASS |
-| | | | | **running total: ~$0.35 / balance was $9.51** |
+| 2026-09-22 | Phase 0 (probe x2 incl. the torchaudio fix), then captioning + a 143-step partial train | RTX A6000 Secure @ $0.53 | ~1.8 | |
+| 2026-09-22 | A40 created by mistake (wrong speed class), killed in seconds | A40 Secure | ~0 | |
+| 2026-09-22 | L40S booted for the retry, deleted before training began | L40S Community @ $0.79 | ~0.2 | |
+| | | | | **day total $1.35 — balance $9.51 -> $8.16** |
+
+### Where the 2026-09-22 session stopped
+
+Phase 0 PASSED and everything is verified end to end EXCEPT a completed training run.
+State to resume from:
+
+- `data/datasets/pranav/` — 16 images + 16 captions, prepped and guard-checked. Ready.
+- `v1` image (`ghcr.io/pranavsingh-ml/chroma-lora:v1`) has the torchaudio fix and boots clean.
+- The A6000 run reached step 143/1600 and was cancelled to move to a faster card; no
+  checkpoint existed yet (first save is at step 250), so nothing was kept.
+- Next action: `bash scripts/pod.sh up` (now prefers Ada), wait, then
+  `STEPS=1200 bash scripts/train.sh data/datasets/pranav pranav-v1 pr4nv`.
+  Expect ~3.6-4 s/step on Ada => ~75 min, ~$1.00. Captions already exist, so
+  `caption.sh` will skip them and cost nothing.
+- 48 GB stock was thin all session: RTX 6000 Ada unavailable in both clouds, Ampere
+  Community gone. L40S Community was the one that landed.
 
 ## Laptop-side verification (done 2026-09-22, no GPU)
 
