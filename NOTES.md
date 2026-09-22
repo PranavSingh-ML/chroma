@@ -77,8 +77,17 @@ A40 was out of stock; ran on **RTX A6000** (same Ampere sm_86 / 48 GB class, $0.
 | LoRA size (rank 16) | 112 MB |
 | Phase 0 wall time (2 runs incl. the torchaudio fix) | ~50 min |
 
-Estimated cost of a real run at these numbers: 16 images -> 1600 steps ~= 55 min training
-+ ~10 min sampling ~= **$0.58** at $0.53/hr.
+**The 2.05 s/step above is at `resolution: [512]` only** (the probe used one bucket to stay cheap).
+A real run with the recommended `[512, 768, 1024]` buckets measured **~7.3 s/step** on the same
+card (4.1 s/it on the 512 bucket, 8.8 s/it on 1024 - a 1024 image is 4x the pixels). So:
+
+| Run | s/step | 1600 steps | cost @ $0.53/hr |
+|---|---|---|---|
+| probe, 512 only | 2.05 | 55 min | $0.48 |
+| **real, [512,768,1024]** | **~7.3** | **~3.3 h** | **~$1.75** |
+
+Never quote the single-bucket number as a run estimate again. Community cloud (same A6000 at
+$0.33/hr) takes that to ~$1.10, which is why `pod.sh` now tries Community first.
 
 ### Bugs Phase 0 caught (all would have hit mid-training)
 

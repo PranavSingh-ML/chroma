@@ -58,7 +58,17 @@ case "${1:-}" in
       if grep -q '"error"' .pod_create.json; then js 'console.log("  ", (JSON.parse(input).error||"").slice(0,120))' < .pod_create.json; return 1; fi
       grep -q '"id"' .pod_create.json || { echo "  unexpected response:"; head -c 300 .pod_create.json; echo; return 1; }
     }
-    try "NVIDIA A40" SECURE || try "NVIDIA RTX A6000" SECURE || try "NVIDIA RTX A6000" COMMUNITY || { echo "no 48GB Ampere card available right now; try again in a few minutes"; exit 1; }
+    # Community first: the SAME silicon at ~38% less ($0.33-0.35/hr vs $0.49-0.53 Secure).
+    # A 1600-step run measured 3.3 h, so that difference is ~$0.65 every single time.
+    # Set CLOUD=SECURE to force Secure (marginally better host reliability).
+    if [ "${CLOUD:-}" = "SECURE" ]; then
+      try "NVIDIA A40" SECURE || try "NVIDIA RTX A6000" SECURE \
+        || { echo "no 48GB Ampere card on Secure right now; retry, or unset CLOUD to allow Community"; exit 1; }
+    else
+      try "NVIDIA A40" COMMUNITY || try "NVIDIA RTX A6000" COMMUNITY \
+        || try "NVIDIA A40" SECURE || try "NVIDIA RTX A6000" SECURE \
+        || { echo "no 48GB Ampere card available right now; try again in a few minutes"; exit 1; }
+    fi
     ID="$(js 'console.log(JSON.parse(input).id)' < .pod_create.json)"
     RATE="$(js 'console.log(JSON.parse(input).costPerHr || "")' < .pod_create.json)"
     rm -f .pod_create.json
