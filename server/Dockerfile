@@ -29,8 +29,11 @@ RUN apt-get update \
 # torch layer: exact wheel from the cu129 index. Changes rarely, so it caches well.
 ARG TORCH_VERSION=2.9.1
 ARG TORCHVISION_VERSION=0.24.1
+ARG TORCHAUDIO_VERSION=2.9.1
+# torchaudio is NOT optional: ai-toolkit imports it at runtime and dies with
+# "No module named 'torchaudio'" without it. Found in Phase 0 on 2026-09-22.
 RUN pip install --index-url https://download.pytorch.org/whl/cu129 \
-      "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}"
+      "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" "torchaudio==${TORCHAUDIO_VERSION}"
 
 # ai-toolkit at a PINNED commit (it has no releases). Its requirements are installed with the
 # torch family filtered out (ours is above), and BEFORE our lock so our pins win on conflict.
@@ -45,6 +48,7 @@ RUN git clone --filter=blob:none https://github.com/ostris/ai-toolkit.git /opt/a
       > /tmp/ai-toolkit-reqs.txt \
  && echo "== ai-toolkit requirements (filtered):" && cat /tmp/ai-toolkit-reqs.txt \
  && pip install -r /tmp/ai-toolkit-reqs.txt \
+ && echo "${AI_TOOLKIT_SHA}" > /opt/ai-toolkit/COMMIT_SHA \
  && rm -rf /opt/ai-toolkit/.git
 
 WORKDIR /app

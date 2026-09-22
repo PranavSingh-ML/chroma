@@ -25,8 +25,13 @@ import guard
 log = logging.getLogger("trainer")
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png")
-# tqdm line from ai-toolkit, e.g. "mara-v1:  12%|█▏ | 240/2000 [06:01<44:10,  1.51s/it, lr: 1.0e-04 loss: 3.412e-01]"
-_STEP_RE = re.compile(r"(\d+)/(\d+)\s*\[")
+# tqdm line from ai-toolkit's TRAINING loop, e.g.
+#   "mara-v1:  12%|█▏ | 240/2000 [06:01<44:10,  1.51s/it, lr: 1.0e-04 loss: 3.412e-01]"
+# The description prefix is the job name. Matching a bare "N/M [" instead would also match the
+# weight-loading and latent-caching bars ("Loading weights: 219/219 [...]"), which would make the
+# reported step jump to 219/219 before training even starts (seen in Phase 0, 2026-09-22).
+def _step_re(name: str) -> re.Pattern:
+    return re.compile(rf"^{re.escape(name)}\s*:.*?(\d+)/(\d+)\s*\[")
 _LOSS_RE = re.compile(r"loss:\s*([0-9.]+(?:e[+-]?\d+)?)")
 _SIT_RE = re.compile(r"([0-9.]+)s/it")
 
@@ -139,6 +144,7 @@ class TrainRun:
         self.proc: subprocess.Popen | None = None
         self.cancelled = False
         self.total_steps = int(cfg["config"]["process"][0]["train"]["steps"])
+        self.step_re = _step_re(name)
 
     def write_config(self) -> None:
         import yaml
@@ -199,7 +205,7 @@ class TrainRun:
                     if not line:
                         continue
                     logf.write(line + "\n")
-                    m = _STEP_RE.search(line)
+                    m = self.step_re.search(line)
                     if m:
                         state["step"], state["total_steps"] = int(m.group(1)), int(m.group(2))
                         ml = _LOSS_RE.search(line)

@@ -77,7 +77,12 @@ def main() -> int:
         report["ai_toolkit_sha"] = subprocess.check_output(
             ["git", "-C", config.AI_TOOLKIT_DIR, "rev-parse", "HEAD"], text=True).strip()
     except Exception:  # noqa: BLE001
-        report["ai_toolkit_sha"] = os.environ.get("AI_TOOLKIT_SHA", "unknown (.git removed at build)")
+        sha_file = os.path.join(config.AI_TOOLKIT_DIR, "COMMIT_SHA")
+        if os.path.exists(sha_file):
+            with open(sha_file, encoding="utf-8") as fh:
+                report["ai_toolkit_sha"] = fh.read().strip()
+        else:
+            report["ai_toolkit_sha"] = os.environ.get("AI_TOOLKIT_SHA", "unknown")
     try:
         report["nvidia_smi"] = subprocess.check_output(
             ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"], text=True).strip()
