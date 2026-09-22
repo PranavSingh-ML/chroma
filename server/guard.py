@@ -10,7 +10,7 @@ import re
 
 _TERMS = [
     "child", "children", "kid", "kids", "minor", "minors", "underage", "under-age", "under age",
-    "teen", "teens", "teenager", "teenagers", "preteen", "pre-teen", "tween",
+    "teen", "teens", "teenage", "teenager", "teenagers", "adolescent", "adolescents", "preteen", "pre-teen", "tween",
     "loli", "lolita", "shota", "shotacon", "lolicon", "jailbait", "pedo", "paedo", "cp",
     "schoolgirl", "schoolboy", "school girl", "school boy", "high school", "highschool",
     "middle school", "junior high", "elementary school", "grade school", "kindergarten",
@@ -18,9 +18,10 @@ _TERMS = [
     "small girl", "small boy", "youthful girl", "childlike", "child-like",
 ]
 _TERM_RE = re.compile(r"(?<![a-z0-9])(" + "|".join(re.escape(t) for t in _TERMS) + r")(?![a-z0-9])", re.IGNORECASE)
-# "16 year old", "16yo", "16 y/o", "age 15", "aged 17", "17-year-old"
+# "16 year old", "16yo", "16 y/o", "age 15", "aged 17", "17-year-old".
+# The (?<![a-z0-9]) before age/aged matters: without it "image 0" reads as "age 0".
 _AGE_RE = re.compile(
-    r"(?<!\d)(?:(?:age|aged)\s*:?\s*(\d{1,2})|(\d{1,2})\s*-?\s*(?:years?|yrs?|yo|y/o)\s*-?\s*(?:old)?)(?!\d)",
+    r"(?<![a-z0-9])(?:(?:age|aged)\s*:?\s*(\d{1,2})(?!\d)|(\d{1,2})\s*-?\s*(?:years?|yrs?|yo|y/o)(?![a-z0-9])\s*-?\s*(?:old)?)",
     re.IGNORECASE,
 )
 

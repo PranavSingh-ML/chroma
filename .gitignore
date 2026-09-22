@@ -19,3 +19,5 @@ apikey.txt
 *.token
 phase0/
 .pod_create.json
+.venv/
+phase0/
