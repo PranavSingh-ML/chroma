@@ -17,3 +17,5 @@ fastapi==0.141.1
 uvicorn[standard]==0.53.0
 python-multipart
 pillow
+# POST /caption loads Qwen3-VL through transformers' AutoModelForImageTextToText;
+# transformers>=5 covers it, no extra package needed.

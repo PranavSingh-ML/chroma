@@ -61,6 +61,13 @@ SIZE_MULTIPLE: int = 16                                        # Flux VAE: 8 * p
 # ---- LoRA registry -----------------------------------------------------------
 LORA_DIR: str = _env("LORA_DIR", "/workspace/loras")
 
+# ---- captioning --------------------------------------------------------------
+# Vision-language model used by POST /caption to write training captions ON THE POD, so photos
+# never leave the user's own machines. 8.9 GB, ungated (verified 2026-09-22). Loaded on demand
+# and unloaded right after, so it never competes with training for VRAM.
+CAPTION_MODEL: str = _env("CAPTION_MODEL", "Qwen/Qwen3-VL-4B-Instruct")
+CAPTION_MODEL_REVISION: str | None = _env("CAPTION_MODEL_REVISION", "ebb281ec70b0")
+
 # ---- training ----------------------------------------------------------------
 AI_TOOLKIT_DIR: str = _env("AI_TOOLKIT_DIR", "/opt/ai-toolkit")
 TRAIN_TEMPLATE: str = _env("TRAIN_TEMPLATE", os.path.join(os.path.dirname(os.path.abspath(__file__)),

@@ -21,3 +21,4 @@ phase0/
 .pod_create.json
 .venv/
 phase0/
+scripts/.yunet.onnx

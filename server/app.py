@@ -1,9 +1,11 @@
-"""FastAPI server: routes + a single-worker queue holding two job kinds (generate | train).
+"""FastAPI server: routes + a single-worker queue holding three job kinds (generate | train | caption).
 
 Contract (spec.md section 4):
   GET    /health                        no auth
   POST   /generate                      json -> 202 {"job_id","seeds"}
   POST   /train                         multipart (dataset zip, name, config json) -> 202 {"job_id"}
+  POST   /caption                       multipart (dataset zip, trigger) -> 202 {"job_id"}
+  GET    /jobs/{id}/captions            {filename: caption} when done
   GET    /jobs/{id}                     status/progress/... ; train jobs add step/total/loss/samples/artifact
   GET    /jobs/{id}/image/{i}           image/png (generate, done)
   GET    /jobs/{id}/samples/{name}      image (train, as they appear)
@@ -36,6 +38,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Respon
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+import captioner as captioner_mod
 import config
 import guard
 import trainer as trainer_mod
@@ -55,7 +58,7 @@ if not config.API_TOKEN and not config.MOCK:
 @dataclass
 class Job:
     id: str
-    kind: str  # generate | train
+    kind: str  # generate | train | caption
     status: str = "queued"  # queued | running | done | error
     progress: float = 0.0
     elapsed_s: float = 0.0
@@ -84,10 +87,16 @@ class Job:
     samples: list = field(default_factory=list)
     artifact: Optional[str] = None
     run: Optional[trainer_mod.TrainRun] = None
+    # caption
+    trigger: str = ""
+    captions: dict = field(default_factory=dict)
 
     def public(self) -> dict:
         d = {"kind": self.kind, "status": self.status, "progress": round(self.progress, 3),
              "elapsed_s": round(self.elapsed_s, 2), "error": self.error}
+        if self.kind == "caption":
+            d.update({"n_images": self.n_images, "done": len(self.captions), "trigger": self.trigger})
+            return d
         if self.kind == "generate":
             d.update({"seeds": self.seeds, "images": len(self.pngs), "steps": self.steps, "guidance": self.guidance,
                       "width": self.width, "height": self.height, "loras": self.loras})
@@ -134,7 +143,7 @@ class JobStore:
                 self.q.remove(job_id)
         if job is None:
             return False
-        if job.kind == "train" and job.job_dir:
+        if job.kind in ("train", "caption") and job.job_dir:
             shutil.rmtree(job.job_dir, ignore_errors=True)
         return True
 
@@ -163,7 +172,7 @@ class JobStore:
                     if j.status in ("done", "error") and (now - (j.finished_at or now)) > config.JOB_TTL_S]
             for k in dead:
                 j = self.jobs.pop(k)
-                if j.kind == "train" and j.job_dir:
+                if j.kind in ("train", "caption") and j.job_dir:
                     shutil.rmtree(j.job_dir, ignore_errors=True)
             self._cap_locked()
 
@@ -179,7 +188,9 @@ state = {"model_loaded": False, "load_error": None, "started_at": time.time(), "
 def _log_job(job: Job) -> None:
     rec = {"ts": time.time(), "job_id": job.id, "kind": job.kind, "status": job.status,
            "elapsed_s": round(job.elapsed_s, 2), "error": (job.error or "").splitlines()[-1] if job.error else None}
-    if job.kind == "generate":
+    if job.kind == "caption":
+        rec.update({"n_images": job.n_images, "captioned": len(job.captions)})
+    elif job.kind == "generate":
         rec.update({"prompt": job.prompt, "negative": job.negative, "seeds": job.seeds, "steps": job.steps,
                     "guidance": job.guidance, "width": job.width, "height": job.height, "loras": job.loras})
     else:
@@ -236,6 +247,30 @@ def _run_train(job: Job) -> None:
     engine.add_lora(job.name, job.artifact)
 
 
+def _run_caption(job: Job) -> None:
+    """Caption a dataset with a VLM on this pod. Loaded on demand, always unloaded after, so it
+    cannot strand VRAM that a later training job needs."""
+    t0 = time.time()
+    cap = captioner_mod.make_captioner()
+    ds = os.path.join(job.job_dir, "dataset")
+    try:
+        cap.load()
+        n = len([f for f in os.listdir(ds) if f.lower().endswith((".jpg", ".jpeg", ".png"))])
+        job.n_images = n
+
+        def _tick(_f=None):
+            job.progress = len(job.captions) / max(1, n)
+            job.elapsed_s = time.time() - t0
+
+        for f in sorted(os.listdir(ds)):
+            if not f.lower().endswith((".jpg", ".jpeg", ".png")):
+                continue
+            job.captions[f] = cap.caption_file(os.path.join(ds, f), job.trigger)
+            _tick()
+    finally:
+        cap.unload()
+
+
 def _run_job(job: Job) -> None:
     job.status = "running"
     state["busy"] = job.kind
@@ -243,6 +278,8 @@ def _run_job(job: Job) -> None:
     try:
         if job.kind == "generate":
             _run_generate(job)
+        elif job.kind == "caption":
+            _run_caption(job)
         else:
             _run_train(job)
         job.status = "done"
@@ -446,6 +483,48 @@ async def train(dataset: UploadFile = File(...), name: str = Form(...), config_j
     store.add(job)
     return {"job_id": job.id, "name": safe, "n_images": info["images"], "captions": info["captions"],
             "missing_captions": info["missing"], "config": summary}
+
+
+@app.post("/caption", status_code=202, dependencies=[Depends(require_token)])
+async def caption(dataset: UploadFile = File(...), trigger: str = Form("")) -> dict:
+    """Caption a dataset with a VLM running on THIS pod, so the photos never go anywhere else.
+    The instruction (server/captioner.py) forbids describing the face - that is deliberate:
+    whatever the caption omits is what the LoRA learns from the trigger token."""
+    hit = guard.check(trigger)
+    if hit:
+        raise HTTPException(422, f"trigger rejected: {hit!r}")
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = os.path.join(config.TRAIN_ROOT, "cap-" + job_id)
+    ds_dir = os.path.join(job_dir, "dataset")
+    os.makedirs(job_dir, exist_ok=True)
+    zip_path = os.path.join(job_dir, "dataset.zip")
+    size = 0
+    with open(zip_path, "wb") as f:
+        while chunk := await dataset.read(1 << 20):
+            size += len(chunk)
+            if size > config.TRAIN_MAX_ZIP_MB << 20:
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(413, f"dataset zip > {config.TRAIN_MAX_ZIP_MB} MB")
+            f.write(chunk)
+    try:
+        info = trainer_mod.unpack_dataset(zip_path, ds_dir)
+    except Exception as e:  # noqa: BLE001
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise HTTPException(400, f"bad dataset: {e}") from e
+    os.remove(zip_path)
+    job = Job(id=job_id, kind="caption", job_dir=job_dir, trigger=trigger.strip(), n_images=info["images"])
+    store.add(job)
+    return {"job_id": job.id, "n_images": info["images"]}
+
+
+@app.get("/jobs/{job_id}/captions", dependencies=[Depends(require_token)])
+def job_captions(job_id: str) -> dict:
+    job = _get(job_id)
+    if job.kind != "caption":
+        raise HTTPException(400, "not a caption job")
+    if job.status != "done":
+        return JSONResponse({"status": job.status, "error": job.error, "partial": job.captions}, status_code=409)
+    return job.captions
 
 
 def _get(job_id: str) -> Job:

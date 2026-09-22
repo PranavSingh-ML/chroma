@@ -67,7 +67,7 @@ import importlib; importlib.import_module("toolkit.job")                        
 print("ai-toolkit importable")
 PY
 
-COPY config.py guard.py lora_convert.py pipeline.py trainer.py app.py phase0_probe.py entrypoint.sh /app/
+COPY config.py guard.py lora_convert.py pipeline.py trainer.py captioner.py app.py phase0_probe.py entrypoint.sh /app/
 COPY train_lora_chroma.template.yaml /app/train_lora_chroma.template.yaml
 RUN chmod +x /app/entrypoint.sh
 
