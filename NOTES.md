@@ -51,27 +51,52 @@ runs on a GPU; fill in from `phase0/phase0_report.json` / smoke-test output.
 Container disk 80 GB ≈ $0.011/hr while running. **No network volume** (user decision) — the
 ~27.5 GB re-download costs ~$0.03–0.06 per cold boot vs ~$5–7/month for a volume.
 
-## Measurements — TODO(pod), fill from Phase 0
+## Measurements (MEASURED - Phase 0, 2026-09-22, pod md93x63f6kqmgs)
+
+A40 was out of stock; ran on **RTX A6000** (same Ampere sm_86 / 48 GB class, $0.53/hr Secure).
 
 | Metric | Value |
 |---|---|
-| GPU / capability actually seen | TODO |
-| image pull (GHCR) | TODO |
-| cold load incl. ~27.5 GB download (s) | TODO |
-| VRAM idle after load (GB) | TODO (expect ~28) |
-| VRAM peak during 1024² generate (GB) | TODO |
-| s/image, 26 steps, 1024², CFG 4 | TODO (expect 25–35 s on A40) |
-| VRAM after `unload()` (GB) | TODO (must be < 2 or the trainer OOMs) |
-| training s/step, rank 16, buckets [512,768,1024] | TODO (expect 1.5–2.5) |
-| pipeline reload after training (s) | TODO (expect 60–120, cache is warm) |
-| **`lora_load_path`** | TODO — `load_lora_weights`, `+normalize`, or `merge_manually` |
-| `v0` / `v1` image digests | TODO |
+| GPU / capability | NVIDIA RTX A6000, 47.7 GB, capability **(8, 6)** |
+| torch / CUDA / python | 2.9.1+cu129 / 12.9 / 3.12.3 |
+| diffusers / transformers / peft | 0.40.0 / 5.17.0 / 0.18.1 |
+| image pull (4.7 GB from GHCR) | ~6 min (slower datacenter than imgedit's) |
+| cold load incl. ~27.5 GB download | **63.9 s** (~430 MB/s - this DC is fast) |
+| warm load (cache hot) | 10.2 s |
+| HF cache on disk after everything | **55.0 GB** - see deviation 6: ai-toolkit downloads its own copy |
+| VRAM idle after load | **27.5 GB** (spec predicted ~28 - correct) |
+| VRAM peak, 1024x1024 generate | **30.07 GB** |
+| VRAM after `engine.unload()` | **0.01 GB** - the pre-training unload works |
+| generate, 26 steps, 1024x1024, CFG 4 | **61.7 s** (~2.4 s/step) - see deviation 5 |
+| generate with LoRA, 26 steps, 768x768 | 39.2 s |
+| **training, rank 16, 512 bucket, batch 1** | **2.05 s/step** (20-step test, loss 0.027 -> 0.018) |
+| pipeline reload after training | **11.5 s** (cache warm) - retraining in one session is cheap |
+| **LoRA format produced by ai-toolkit** | **`comfy_peft`** (`diffusion_model.*.lora_A/B`, no alpha) |
+| **LoRA load path that works** | **`load_lora_weights` + `lora_convert.normalize`** |
+| LoRA keys converted / dropped | **456 / 0** - the whitelist drops nothing on a real file |
+| LoRA size (rank 16) | 112 MB |
+| Phase 0 wall time (2 runs incl. the torchaudio fix) | ~50 min |
+
+Estimated cost of a real run at these numbers: 16 images -> 1600 steps ~= 55 min training
++ ~10 min sampling ~= **$0.58** at $0.53/hr.
+
+### Bugs Phase 0 caught (all would have hit mid-training)
+
+1. **`No module named 'torchaudio'`** - the Dockerfile filtered the whole torch family out of
+   ai-toolkit's requirements (we pin torch ourselves), but ai-toolkit imports torchaudio at
+   runtime. Training died after 9 s. Fixed: `torchaudio==2.9.1` in the torch layer.
+2. **Progress parser matched any tqdm bar** - `(\d+)/(\d+)\s*\[` locked onto
+   `Loading weights: 219/219`, so the reported step jumped to 219/219 before training started.
+   Fixed: anchored to the run-name prefix only the training loop uses.
+3. **`pod_ssh.py` emitted CRLF** - python's Windows text mode put a `` in the port, so every
+   ssh/scp call failed with `Bad port '22079'`. Fixed at the source.
 
 ## Spend log
 
 | Date | What | GPU | Hours | $ |
 |---|---|---|---|---|
-| | | | | **running total: $0.00 (nothing has run on a GPU yet)** |
+| 2026-09-22 | Phase 0 (probe x2, torchaudio fix, then served for training) | RTX A6000 Secure | in progress | ~$0.35 to Phase 0 PASS |
+| | | | | **running total: ~$0.35 / balance was $9.51** |
 
 ## Laptop-side verification (done 2026-09-22, no GPU)
 
@@ -107,3 +132,15 @@ rejecting every ordinary caption ending in a number. Added a letter boundary; ad
    Microsoft Store stub), so the scripts probe for a working interpreter.
 5. `spec.md` §4 said `POST /loras` takes the file as `file=` with `name=`; kept, but the server
    also refuses uploads while `busy` is `train`/`reload` (409) since the pipeline is gone then.
+6. **Generation is 61.7 s/image, not the 25-35 s the spec estimated.** Chroma has no guidance
+   embedding, so `guidance 4.0` runs a real negative pass: 26 steps = **52** forward passes, not
+   26. The estimate assumed one pass per step. Levers if it matters: 20 steps (~47 s), or an
+   L40S/6000-Ada pod. Training is unaffected (no CFG).
+7. **Inference and training do NOT share one download.** The HF cache reached 55 GB, not 27.5:
+   ai-toolkit's chroma loader fetches its own copy of the weights rather than reusing ours.
+   The 80 GB container disk absorbs it, but spec.md section 1's "ONE download shared by
+   inference and training" is wrong, and the first train job on a cold pod pays an extra
+   ~27.5 GB download. Worth revisiting if cold-boot cost ever matters.
+8. Phase 0 ran twice: the first run died on torchaudio, the fix was applied live on the pod
+   (`pip install torchaudio`) and re-run, then baked into the Dockerfile. The frozen lock comes
+   from the successful run.
