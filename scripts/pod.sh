@@ -65,9 +65,14 @@ case "${1:-}" in
       try "NVIDIA A40" SECURE || try "NVIDIA RTX A6000" SECURE \
         || { echo "no 48GB Ampere card on Secure right now; retry, or unset CLOUD to allow Community"; exit 1; }
     else
-      try "NVIDIA A40" COMMUNITY || try "NVIDIA RTX A6000" COMMUNITY \
+      # Ada (sm_89) first: ~2x the bf16 throughput of Ampere for a similar hourly rate, so it is
+      # cheaper PER RUN as well as faster. Measured 2026-09-22: A6000 ~7.3 s/step at
+      # [512,768,1024] buckets. Ampere is the fallback when no Ada card is in stock.
+      try "NVIDIA RTX 6000 Ada Generation" COMMUNITY || try "NVIDIA L40S" COMMUNITY \
+        || try "NVIDIA RTX 6000 Ada Generation" SECURE || try "NVIDIA L40S" SECURE \
+        || try "NVIDIA A40" COMMUNITY || try "NVIDIA RTX A6000" COMMUNITY \
         || try "NVIDIA A40" SECURE || try "NVIDIA RTX A6000" SECURE \
-        || { echo "no 48GB Ampere card available right now; try again in a few minutes"; exit 1; }
+        || { echo "no 48GB card available right now; try again in a few minutes"; exit 1; }
     fi
     ID="$(js 'console.log(JSON.parse(input).id)' < .pod_create.json)"
     RATE="$(js 'console.log(JSON.parse(input).costPerHr || "")' < .pod_create.json)"
